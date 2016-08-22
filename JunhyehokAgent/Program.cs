@@ -55,12 +55,11 @@ namespace JunhyehokAgent
             //======================BACKEND CONNECT===============================
             Console.WriteLine("Connecting to Backend...");
             string backendInfo = "";
-            try { backendInfo = System.IO.File.ReadAllText("backend.conf"); }
+            try { backendInfo = System.IO.File.ReadAllText("agentBackend.conf"); }
             catch (Exception e) { Console.WriteLine("\n" + e.Message); Environment.Exit(0); }
             Socket backendSocket = Connect(backendInfo);
-            //Socket backendSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-
             ClientHandle backend = new ClientHandle(backendSocket);
+            backend.StartSequence();
 
             //======================INITIALIZE==================================
             Console.WriteLine("Initializing lobby and rooms...");
@@ -73,13 +72,13 @@ namespace JunhyehokAgent
 
             //===================CLIENT SOCKET ACCEPT===========================
             Console.WriteLine("Accepting clients...");
-            Socket s = echoc.so.Accept();
-            ClientHandle client = new ClientHandle(s);
-            ReceiveHandle.admin = s;
-            client.StartSequence();
+            
             while (true)
             {
-                s = echoc.so.Accept();
+                Socket s = echoc.so.Accept();
+                ClientHandle client = new ClientHandle(s);
+                ReceiveHandle.admin = s;
+                client.StartSequence();
             }
         }
         public static Socket Connect(string info)
