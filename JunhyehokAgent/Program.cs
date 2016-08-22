@@ -73,14 +73,16 @@ namespace JunhyehokAgent
             Console.WriteLine("Starting Frontend Server...");
             if (connection_type == "web")
             {
+                string filePath = Path.Combine(Environment.CurrentDirectory, "JunhyehokWebServer.exe");
                 string arg = "-cp 38080 -mmf " + mmfName;
-                Process.Start("JunhyehokWebServer.exe", arg);
+                Process.Start(filePath, arg);
                 //Process.Start("C:\\Users\\hokjoung\\Documents\\Visual Studio 2015\\Projects\\JunhyehokWebServer\\JunhyehokWebServer\\bin\\Release\\JunhyehokWebServer.exe", arg);
             }
             else if (connection_type == "tcp")
             {
+                string filePath = Path.Combine(Environment.CurrentDirectory, "JunhyehokServer.exe");
                 string arg = "-cp 30000 -mmf " + mmfName;
-                Process.Start("JunhyehokServer.exe", arg);
+                Process.Start(filePath, arg);
                 //Process.Start("C:\\Users\\hokjoung\\Documents\\Visual Studio 2015\\Projects\\JunhyehokServer\\JunhyehokServer\\bin\\Release\\JunhyehokServer.exe", arg);
             }
             else
