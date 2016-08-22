@@ -25,15 +25,17 @@ namespace JunhyehokAgent
         public static bool adminAlive;
         public static Socket backend;
         static string mmfName;
+        static string connection_type;
         static MemoryMappedFile mmf;
         static MemoryMappedFile mmfIpx;
         readonly Header NoResponseHeader = new Header(ushort.MaxValue, 0);
         readonly Packet NoResponsePacket = new Packet(new Header(ushort.MaxValue, 0), null);
 
-        public ReceiveHandle(Socket backendSocket, string mmfNombre)
+        public ReceiveHandle(Socket backendSocket, string mmfNombre, string conn_type)
         {
             backend = backendSocket;
             mmfName = mmfNombre;
+            connection_type = conn_type;
             //Initialize MMF
             mmf = MemoryMappedFile.CreateOrOpen(mmfName, Marshal.SizeOf(typeof(AAServerInfoResponse)));
             mmfIpx = MemoryMappedFile.CreateOrOpen(mmfName + "IPX", 1);
@@ -75,8 +77,18 @@ namespace JunhyehokAgent
                     accessor.WriteArray<byte>(0, start, 0, start.Length);
                 }
                 mutex.ReleaseMutex();
-                string arg = "-cp 30000 -mmf " + mmfName;
-                Process.Start("C:\\Users\\hokjoung\\Documents\\Visual Studio 2015\\Projects\\JunhyehokServer\\JunhyehokServer\\bin\\Release\\JunhyehokServer.exe", arg);
+                if (connection_type == "web")
+                {
+                    string arg = "-cp 38080 -mmf " + mmfName;
+                    Process.Start("JunhyehokWebServer.exe", arg);
+                    //Process.Start("C:\\Users\\hokjoung\\Documents\\Visual Studio 2015\\Projects\\JunhyehokWebServer\\JunhyehokWebServer\\bin\\Release\\JunhyehokWebServer.exe", arg);
+                }
+                else if (connection_type == "tcp")
+                {
+                    string arg = "-cp 30000 -mmf " + mmfName;
+                    Process.Start("JunhyehokServer.exe", arg);
+                    //Process.Start("C:\\Users\\hokjoung\\Documents\\Visual Studio 2015\\Projects\\JunhyehokServer\\JunhyehokServer\\bin\\Release\\JunhyehokServer.exe", arg);
+                }
                 adminAlive = true;
             }
             return NoResponsePacket;
@@ -181,7 +193,8 @@ namespace JunhyehokAgent
             {
                 //------------No action from client----------
                 case ushort.MaxValue - 1:
-                    responsePacket = new Packet(new Header(Code.HEARTBEAT, 0), null);
+                    responsePacket = NoResponsePacket;
+                    //responsePacket = new Packet(new Header(Code.HEARTBEAT, 0), null);
                     break;
 
                 //------------SERVER---------

@@ -21,12 +21,13 @@ namespace JunhyehokAgent
             string host = null;     //Default
             string clientPort = "40000";  //Default
             string mmfName = "JunhyehokMmf"; //Default
+            string connection_type = "tcp";
             TcpServer echoc;
 
             //=========================GET ARGS=================================
             if (args.Length == 0)
             {
-                Console.WriteLine("Format: JunhyehokAgent -mmf [MMF name]");
+                Console.WriteLine("Format: JunhyehokAgent -mmf [MMF name] -ct [Connection Type]");
                 Environment.Exit(0);
             }
 
@@ -35,14 +36,17 @@ namespace JunhyehokAgent
                 switch (args[i])
                 {
                     case "--help":
-                        Console.WriteLine("Format: JunhyehokAgent -mmf [MMF name]");
+                        Console.WriteLine("Format: JunhyehokAgent -mmf [MMF name] -ct [Connection Type]");
                         Environment.Exit(0);
                         break;
                     case "-mmf":
                         mmfName = args[++i];
                         break;
+                    case "-ct":
+                        connection_type = args[++i];
+                        break;
                     default:
-                        Console.Error.WriteLine("ERROR: incorrect inputs \nFormat: JunhyehokAgent -mmf [MMF name]");
+                        Console.Error.WriteLine("ERROR: incorrect inputs \nFormat: JunhyehokAgent -mmf [MMF name] -ct [Connection Type]");
                         Environment.Exit(0);
                         break;
                 }
@@ -63,12 +67,27 @@ namespace JunhyehokAgent
 
             //======================INITIALIZE==================================
             Console.WriteLine("Initializing lobby and rooms...");
-            ReceiveHandle recvHandle = new ReceiveHandle(backendSocket, mmfName);
+            ReceiveHandle recvHandle = new ReceiveHandle(backendSocket, mmfName, connection_type);
 
             //=====================START FRONTEND SERVER========================
             Console.WriteLine("Starting Frontend Server...");
-            string arg = "-cp 30000 -mmf " + mmfName;
-            Process.Start("C:\\Users\\hokjoung\\Documents\\Visual Studio 2015\\Projects\\JunhyehokServer\\JunhyehokServer\\bin\\Release\\JunhyehokServer.exe", arg);
+            if (connection_type == "web")
+            {
+                string arg = "-cp 38080 -mmf " + mmfName;
+                Process.Start("JunhyehokWebServer.exe", arg);
+                //Process.Start("C:\\Users\\hokjoung\\Documents\\Visual Studio 2015\\Projects\\JunhyehokWebServer\\JunhyehokWebServer\\bin\\Release\\JunhyehokWebServer.exe", arg);
+            }
+            else if (connection_type == "tcp")
+            {
+                string arg = "-cp 30000 -mmf " + mmfName;
+                Process.Start("JunhyehokServer.exe", arg);
+                //Process.Start("C:\\Users\\hokjoung\\Documents\\Visual Studio 2015\\Projects\\JunhyehokServer\\JunhyehokServer\\bin\\Release\\JunhyehokServer.exe", arg);
+            }
+            else
+            {
+                Console.WriteLine("ERROR: Wrong Connection type. Exiting...");
+                Environment.Exit(0);
+            }
 
             //===================CLIENT SOCKET ACCEPT===========================
             Console.WriteLine("Accepting clients...");
