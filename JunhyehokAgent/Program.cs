@@ -76,30 +76,47 @@ namespace JunhyehokAgent
                 string filePath = Path.Combine(Environment.CurrentDirectory, "JunhyehokWebServer.exe");
                 string arg = "-cp 38080 -mmf " + mmfName;
                 Process.Start(filePath, arg);
-                //Process.Start("C:\\Users\\hokjoung\\Documents\\Visual Studio 2015\\Projects\\JunhyehokWebServer\\JunhyehokWebServer\\bin\\Release\\JunhyehokWebServer.exe", arg);
             }
             else if (connection_type == "tcp")
             {
                 string filePath = Path.Combine(Environment.CurrentDirectory, "JunhyehokServer.exe");
                 string arg = "-cp 30000 -mmf " + mmfName;
                 Process.Start(filePath, arg);
-                //Process.Start("C:\\Users\\hokjoung\\Documents\\Visual Studio 2015\\Projects\\JunhyehokServer\\JunhyehokServer\\bin\\Release\\JunhyehokServer.exe", arg);
             }
             else
             {
                 Console.WriteLine("ERROR: Wrong Connection type. Exiting...");
                 Environment.Exit(0);
             }
+            //=====================FRONTEND ACCEPT==============================
+            Socket frontSo = null;
+            ClientHandle front = null;
 
             //===================CLIENT SOCKET ACCEPT===========================
             Console.WriteLine("Accepting clients...");
             
             while (true)
             {
+                //always accept front first, and then accept admins (discard sockets before front is up)
                 Socket s = echoc.so.Accept();
-                ClientHandle client = new ClientHandle(s);
-                ReceiveHandle.admin = s;
-                client.StartSequence();
+                if (((IPEndPoint)s.RemoteEndPoint).Address.ToString() == "127.0.0.1")
+                {
+                    if (frontSo != null) frontSo.Close(); //close old front socket (when server dead due to missed heatbeat or Stop signal)
+
+                    frontSo = s;
+                    front = new ClientHandle(frontSo, true, ClientHandle.Heartbeat.Short);
+                    ReceiveHandle.front = frontSo;
+                    ReceiveHandle.frontAlive = true;
+                    front.StartSequence();
+                }
+                else if (null != front)
+                {
+                    ClientHandle client = new ClientHandle(s);
+                    ReceiveHandle.admin = s;
+                    client.StartSequence();
+                }
+                else
+                    continue;
             }
         }
         public static Socket Connect(string info)

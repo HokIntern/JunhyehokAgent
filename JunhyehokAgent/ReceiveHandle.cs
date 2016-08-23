@@ -22,12 +22,12 @@ namespace JunhyehokAgent
         Packet recvPacket;
 
         public static Socket admin;
-        public static bool adminAlive;
+        public static Socket front;
+        public static bool frontAlive;
         public static Socket backend;
-        static string mmfName;
+        public static string mmfName;
+        public static MemoryMappedFile mmf;
         static string connection_type;
-        static MemoryMappedFile mmf;
-        static MemoryMappedFile mmfIpx;
         readonly Header NoResponseHeader = new Header(ushort.MaxValue, 0);
         readonly Packet NoResponsePacket = new Packet(new Header(ushort.MaxValue, 0), null);
 
@@ -38,21 +38,10 @@ namespace JunhyehokAgent
             connection_type = conn_type;
             //Initialize MMF
             mmf = MemoryMappedFile.CreateOrOpen(mmfName, Marshal.SizeOf(typeof(AAServerInfoResponse)));
-            mmfIpx = MemoryMappedFile.CreateOrOpen(mmfName + "IPX", 1);
             //Initialize Lock
             bool mutexCreated;
             Mutex mutex = new Mutex(true, "MMF_IPC" + mmfName, out mutexCreated);
             mutex.ReleaseMutex();
-            Mutex mutexIpx = new Mutex(true, "MMF_IPX" + mmfName, out mutexCreated);
-            //Write 1 to file to indicate started
-            byte[] start = { 1 };
-            using (var accessor = mmfIpx.CreateViewAccessor(0, start.Length))
-            {
-                // Write to MMF
-                accessor.WriteArray<byte>(0, start, 0, start.Length);
-            }
-            mutexIpx.ReleaseMutex();
-            adminAlive = true;
         }
 
         public ReceiveHandle(ClientHandle client, Packet recvPacket)
@@ -65,34 +54,21 @@ namespace JunhyehokAgent
         //==========================================SERVER_START 1200===========================================
         public Packet ResponseServerStart(Packet recvPacket)
         {
-            if (!adminAlive)
+            if (!frontAlive)
             {
-                //Write 1 to file to indicate started
-                byte[] start = { 1 };
-                Mutex mutex = Mutex.OpenExisting("MMF_IPX" + mmfName);
-                mutex.WaitOne();
-                using (var accessor = mmfIpx.CreateViewAccessor(0, start.Length))
-                {
-                    // Write to MMF
-                    accessor.WriteArray<byte>(0, start, 0, start.Length);
-                }
-                
-                mutex.ReleaseMutex();
                 if (connection_type == "web")
                 {
                     string filePath = Path.Combine(Environment.CurrentDirectory, "JunhyehokWebServer.exe");
                     string arg = "-cp 38080 -mmf " + mmfName;
                     Process.Start(filePath, arg);
-                    //Process.Start("C:\\Users\\hokjoung\\Documents\\Visual Studio 2015\\Projects\\JunhyehokWebServer\\JunhyehokWebServer\\bin\\Release\\JunhyehokWebServer.exe", arg);
                 }
                 else if (connection_type == "tcp")
                 {
                     string filePath = Path.Combine(Environment.CurrentDirectory, "JunhyehokServer.exe");
                     string arg = "-cp 30000 -mmf " + mmfName;
                     Process.Start(filePath, arg);
-                    //Process.Start("C:\\Users\\hokjoung\\Documents\\Visual Studio 2015\\Projects\\JunhyehokServer\\JunhyehokServer\\bin\\Release\\JunhyehokServer.exe", arg);
                 }
-                adminAlive = true;
+                frontAlive = true;
             }
             return NoResponsePacket;
         }
@@ -102,13 +78,13 @@ namespace JunhyehokAgent
         public Packet ResponseServerRestart(Packet recvPacket)
         {
             Packet throwaway;
-            if (adminAlive)
+            if (frontAlive)
             {
                 throwaway = ResponseServerStop(recvPacket);
-                adminAlive = false;
+                frontAlive = false;
             }
             Thread.Sleep(500);
-            throwaway = ResponseServerStart(recvPacket);
+            throwaway = ResponseServerStart(recvPacket); //turns frontAlive to true in function
             return NoResponsePacket;
         }
         //==========================================SERVER_STOP 1270============================================
@@ -116,20 +92,11 @@ namespace JunhyehokAgent
         //==========================================SERVER_STOP 1270============================================
         public Packet ResponseServerStop(Packet recvPacket)
         {
-            if (adminAlive)
+            if (frontAlive)
             {
-                byte[] stop = { 0 };
-                Mutex mutex = Mutex.OpenExisting("MMF_IPX" + mmfName);
-                mutex.WaitOne();
-
-                // Create Accessor to MMF
-                using (var accessor = mmfIpx.CreateViewAccessor(0, stop.Length))
-                {
-                    // Write to MMF
-                    accessor.WriteArray<byte>(0, stop, 0, stop.Length);
-                }
-                mutex.ReleaseMutex();
-                adminAlive = false;
+                Packet kill = new Packet(new Header(Code.SERVER_STOP, 0), null);
+                front.SendBytes(kill);
+                frontAlive = false;
             }
             return NoResponsePacket;
         }
@@ -196,8 +163,10 @@ namespace JunhyehokAgent
             {
                 //------------No action from client----------
                 case ushort.MaxValue - 1:
+                    responsePacket = new Packet(new Header(Code.HEARTBEAT, 0), null);
+                    break;
+                case Code.HEARTBEAT_SUCCESS:
                     responsePacket = NoResponsePacket;
-                    //responsePacket = new Packet(new Header(Code.HEARTBEAT, 0), null);
                     break;
 
                 //------------SERVER---------

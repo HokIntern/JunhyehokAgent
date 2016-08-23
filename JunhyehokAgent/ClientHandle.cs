@@ -15,6 +15,8 @@ namespace JunhyehokAgent
     class ClientHandle
     {
         bool debug = true;
+        bool isFront;
+        Heartbeat heartbeat;
         int heartbeatMiss = 0;
         Socket so;
         int bytecount;
@@ -24,9 +26,16 @@ namespace JunhyehokAgent
 
         public Socket So { get { return so; } }
 
-        public ClientHandle(Socket s)
+        public enum Heartbeat : int
+        {
+            Short = 2000, Medium = 20000, Long = 200000, Infinite
+        }
+
+        public ClientHandle(Socket s, bool isFront=false, Heartbeat heartbeat = Heartbeat.Infinite)
         {
             so = s;
+            this.isFront = isFront;
+            this.heartbeat = heartbeat;
             remoteHost = ((IPEndPoint)so.RemoteEndPoint).Address.ToString();
             remotePort = ((IPEndPoint)so.RemoteEndPoint).Port.ToString();
             Console.WriteLine("[Client] Connection established with {0}:{1}\n", remoteHost, remotePort);
@@ -77,14 +86,14 @@ namespace JunhyehokAgent
             Packet recvRequest;
 
             //========================get HEADER============================
-            byte[] headerBytes = await GetBytesAsync(HEADER_SIZE);
+            byte[] headerBytes = await GetBytesAsync(HEADER_SIZE, heartbeat);
             if (null == headerBytes)
                 return disconnectedFlagPacket;
             recvHeader = BytesToHeader(headerBytes);
             recvRequest.header = recvHeader;
 
             //========================get DATA==============================
-            byte[] dataBytes = await GetBytesAsync(recvHeader.size);
+            byte[] dataBytes = await GetBytesAsync(recvHeader.size, heartbeat);
             if (null == dataBytes)
                 return disconnectedFlagPacket;
             recvRequest.data = dataBytes;
@@ -94,6 +103,11 @@ namespace JunhyehokAgent
 
         public void CloseConnection()
         {
+            if (isFront)
+            {
+                UpdateMMF(false);
+                ReceiveHandle.frontAlive = false;
+            }
             //=================Close Connection/Exit Thread==================
             Console.WriteLine("Closing connection with {0}:{1}", remoteHost, remotePort);
             so.Shutdown(SocketShutdown.Both);
@@ -101,16 +115,20 @@ namespace JunhyehokAgent
             Console.WriteLine("Connection closed\n");
         }
 
-        private async Task<byte[]> GetBytesAsync(int length)
+        private async Task<byte[]> GetBytesAsync(int length, Heartbeat heartbeat)
         {
             byte[] bytes = new byte[length];
             if (length != 0) //this check has to exist. otherwise Receive timeouts for 60seconds while waiting for nothing
             {
                 try
                 {
-                    //so.ReceiveTimeout = 3000000;
-                    so.ReceiveTimeout = 200000;
-                    bytecount = await Task.Run(() => so.Receive(bytes));
+                    if (heartbeat != Heartbeat.Infinite)
+                    {
+                        so.ReceiveTimeout = (int)heartbeat;
+                        bytecount = await Task.Run(() => so.Receive(bytes));
+                    }
+                    else
+                        bytecount = await Task.Run(() => so.Receive(bytes));
 
                     //assumes that the line above(so.Receive) will throw exception 
                     //if times out, so the line below(reset hearbeatMiss) will not be reached
@@ -129,9 +147,11 @@ namespace JunhyehokAgent
                         if (bytes.Length != 0)
                         {
                             heartbeatMiss++;
-                            if (heartbeatMiss == 100)
+                            if (heartbeatMiss == 3)
                             {
                                 Console.WriteLine("[HEARBEAT MISSED] {0}:{1}", remoteHost, remotePort);
+                                UpdateMMF(false);
+                                ReceiveHandle.frontAlive = false;
                                 return null;
                             }
 
@@ -168,6 +188,27 @@ namespace JunhyehokAgent
             }
             catch (SocketException) { return false; }
             catch (Exception) { return false; }
+        }
+        private void UpdateMMF(bool alive = true)
+        {
+            AAServerInfoResponse aaServerInfoResp;
+            aaServerInfoResp.alive = alive;
+            aaServerInfoResp.userCount = 0;
+            aaServerInfoResp.roomCount = 0;
+            byte[] aaServerInfoRespBytes = Serializer.StructureToByte(aaServerInfoResp);
+
+            Console.WriteLine("[MEMORYMAPPED FILE] Writing to MMF: ({0})...", ReceiveHandle.mmfName);
+
+            Mutex mutex = Mutex.OpenExisting("MMF_IPC" + ReceiveHandle.mmfName);
+            mutex.WaitOne();
+
+            // Create Accessor to MMF
+            using (var accessor = ReceiveHandle.mmf.CreateViewAccessor(0, aaServerInfoRespBytes.Length))
+            {
+                // Write to MMF
+                accessor.WriteArray<byte>(0, aaServerInfoRespBytes, 0, aaServerInfoRespBytes.Length);
+            }
+            mutex.ReleaseMutex();
         }
     }
 }
